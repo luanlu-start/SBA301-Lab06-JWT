@@ -1,0 +1,97 @@
+{
+  "info": {
+    "_postman_id": "6d451d35-922e-479c-a6ce-31b1a3377a38",
+    "name": "SBA301 Lab 06 - Spring Security JWT",
+    "description": "Core Lab 06 signup, login, bearer authentication, protected user endpoints, and negative cases.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": { "type": "noauth" },
+  "item": [
+    {
+      "name": "1. Signup",
+      "event": [
+        { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["pm.environment.set('email', 'student06-' + Date.now() + '@example.com');"] } },
+        { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Signup returns 201', function () { pm.response.to.have.status(201); });", "pm.test('Response does not expose password', function () { pm.expect(pm.response.json()).not.to.have.property('password'); });"] } }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"SBA301 Student\",\n  \"email\": \"{{email}}\",\n  \"password\": \"P@ssword123\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/auth/signup"
+      }
+    },
+    {
+      "name": "2. Login and save token",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Login returns 200', function () { pm.response.to.have.status(200); });", "const body = pm.response.json();", "pm.expect(body.token).to.be.a('string').and.not.empty;", "pm.environment.set('token', body.token);", "pm.test('Token was saved', function () { pm.expect(pm.environment.get('token')).to.eql(body.token); });"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"P@ssword123\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "3. Current user - no token (expect 401)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Missing token is rejected', function () { pm.response.to.have.status(401); });"] } }],
+      "request": { "method": "GET", "header": [], "url": "{{baseUrl}}/users/me" }
+    },
+    {
+      "name": "4. Current user - valid token",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Valid token opens protected endpoint', function () { pm.response.to.have.status(200); });", "pm.test('Current user is correct and has no password', function () { const body = pm.response.json(); pm.expect(body.email).to.eql(pm.environment.get('email')); pm.expect(body).not.to.have.property('password'); });"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/users/me" }
+    },
+    {
+      "name": "5. List users - valid token",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('User list is protected and contains no password', function () { pm.response.to.have.status(200); pm.expect(pm.response.text()).not.to.include('password'); });"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/users" }
+    },
+    {
+      "name": "6. Duplicate signup (expect 409)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Duplicate email is rejected', function () { pm.response.to.have.status(409); });"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"SBA301 Student\",\n  \"email\": \"{{email}}\",\n  \"password\": \"P@ssword123\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/auth/signup"
+      }
+    },
+    {
+      "name": "7. Wrong password (expect 401)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Bad credentials are rejected', function () { pm.response.to.have.status(401); });"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"wrong-password\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/auth/login"
+      }
+    },
+    {
+      "name": "8. Malformed bearer token (expect 401)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Malformed token is rejected', function () { pm.response.to.have.status(401); });"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer abc" }], "url": "{{baseUrl}}/users/me" }
+    },
+    {
+      "name": "9. Tampered bearer token (expect 401)",
+      "event": [
+        { "listen": "prerequest", "script": { "type": "text/javascript", "exec": ["const token = pm.environment.get('token');", "const parts = (token || '').split('.');", "if (parts.length !== 3) { throw new Error('Run Login first to create a JWT'); }", "const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';", "const lastIndex = alphabet.indexOf(parts[2].slice(-1));", "parts[2] = parts[2].slice(0, -1) + alphabet[lastIndex ^ 16];", "pm.environment.set('tamperedToken', parts.join('.'));"] } },
+        { "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Tampered signature is rejected', function () { pm.response.to.have.status(401); });"] } }
+      ],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{tamperedToken}}" }], "url": "{{baseUrl}}/users/me" }
+    },
+    {
+      "name": "10. Expired bearer token (set TTL to 5 seconds first)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Expired token is rejected', function () { pm.response.to.have.status(401); });"] } }],
+      "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{token}}" }], "url": "{{baseUrl}}/users/me", "description": "Temporarily set security.jwt.expiration-time=5000 and restart. Run Login, wait longer than five seconds, then send this request. Restore 3600000 afterward." }
+    },
+    {
+      "name": "11. Invalid signup email (expect 400)",
+      "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["pm.test('Validation error is returned', function () { pm.response.to.have.status(400); });"] } }],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"Student\",\n  \"email\": \"not-an-email\",\n  \"password\": \"short\"\n}", "options": { "raw": { "language": "json" } } },
+        "url": "{{baseUrl}}/auth/signup"
+      }
+    }
+  ]
+}
